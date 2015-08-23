@@ -57,7 +57,7 @@
 			};
 			
 			Well.prototype.buildGraphData = function() {
-			console.log("Building graph data...");
+				console.log("Building graph data...");
 				var transformed = _.map(this.details, function(row) {
 					return [new Date(row.StartTime), row.QC_AutoDepth];
 				});
@@ -219,6 +219,11 @@
 				
 			}) //this closes the controller
 			;
+			
+$(document).on("click", "#chart_svg", function(e) {
+     //console.log (e);
+     console.log (e.target.__data__);
+    });
 		</script>
 	</head>
 	<body>
@@ -236,7 +241,7 @@
 				<div class="row">
 					<div class="col-md-8">
 						<div class="row nvdGraph">
-							<nvd3 options="options" data="data" class="with-3d-shadow with-transitions"></nvd3>
+							<nvd3 options="options" data="data" id="chart_svg" class="with-3d-shadow with-transitions"></nvd3>
 						</div>
 						<div class="row">
 							<button class="btn" ng-click="wells.selectedWell.buildGraphData()">Refresh</button>
@@ -263,4 +268,4 @@
 				</div>
 				</div>
 			</body>
-		</html>																																																																																																																																																																	
+		</html>																																																																																																																																																																			
