@@ -6,248 +6,261 @@
 		<link rel="stylesheet" href="css/bootstrap.min.css">
 		<link rel="stylesheet" href="css/bootstrap-responsive.min.css">
 		<link rel="stylesheet" href="css/drilling_QC.css">
+		<link rel="stylesheet" href="css/nv.d3.min.css"/>
 		<script src="js/papaparse.min.js"></script>
 		<script src="js/angular.min.js"></script>
 		<script src="js/jquery-2.1.4.min.js"></script>
 		<script src="js/bootstrap.min.js"></script>
-		<script type="text/javascript" src="https://www.google.com/jsapi"></script>
+		<script src="js/angular-nvd3.min.js"></script>
+		<script src="js/d3.min.js"></script>
+		<script src="js/nv.d3.min.js"></script>
+		<script src="js/lodash.min.js"></script>
+		
 		<script>
-			google.load('visualization', '1', {packages: ['corechart']});
+			function set_color(operation){
+				switch (operation) {
+					case "Csg & Cmt":
+					color = "purple";
+					break;
+					case "Drilling":
+					color = "red";
+					break;
+					case "Logging":
+					color = "yellow";
+					break;
+					default: 
+					color  = "blue";
+				}
+				return color;
+			}
 			
-			$(function()
-			{
-				$('#submit-parse').click(function()
-				{
-					var files = $('#fileInput')[0].files;					
+			var Well = function(uwi, wellName, parent) {
+				this.UWI = uwi;
+				this.wellName = wellName;
+				this.details = [];
+				
+				if (parent) {
+					this.parent = parent;
+				}
+			};
+			
+			Well.prototype.addDetails = function(detail) {
+				this.details.push(detail);
+				
+				return this;
+			};
+			
+			Well.prototype.export = function() {
+				console.log("Exporting "+this.UWI,this);
+				
+				return this;
+			};
+			
+			Well.prototype.buildGraphData = function() {
+			console.log("Building graph data...");
+				var transformed = _.map(this.details, function(row) {
+					return [new Date(row.StartTime), row.QC_AutoDepth];
+				});
+				console.log("transformed data",transformed);
+				
+				return [{
+					key: 	'Depth',
+					values: transformed
+				}];
+			};
+			
+			Well.prototype.getParent = function() {
+				return this.parent;
+			};
+			
+			var ListOfWells = function() {
+				var data = [];
+				var index = {};
+				this.selectedWell = null;
+				
+				this.all = this.getAll = function() {
+					return data;
+				};
+				
+				this.editableFields = ['QC_AutoDepth', 'QC_MajorOperation'];
+				
+				this.addWell = function(well) {
+					data.push(well);
+					index[well.UWI] = well;
 					
-					start = performance.now();
-					Papa.parse(files[0],{
+					this.selectedWell = this.selectedWell || well;
+					
+					return well;
+				};
+				
+				this.selectNextWell = function() {
+					var index = data.indexOf(this.selectedWell);
+					if (index + 1 < data.length - 1) {
+						this.selectedWell = data[++index];
+					}
+					
+					return this;
+				};
+				
+				this.selectPreviousWell = function() {
+					var index = data.indexOf(this.selectedWell);
+					if (index > 0) {
+						this.selectedWell = data[--index];
+					}
+					
+					return this;
+				};
+				
+				this.getWell = function(wellName) {
+					return index[wellName];
+				};
+				
+				this.loadData = function(newData) {
+					for (var i = 0; i < newData.length; i++) {
+						var row = newData[i];
+						var onWell = this.getWell(row.UWI) || this.addWell(new Well(row.UWI, row.Wellname, this));
+						
+						onWell.addDetails(row);
+					}
+					
+					return this;
+				};
+			};
+			
+			angular
+			.module('drillingApp', ['nvd3'])
+			.controller('drillingInfoController', function($scope, $window) {
+				$window.wells = $scope.wells = new ListOfWells();
+				
+				$('#fileInput').change(function(e){
+					console.log('selected file changed ',e.target.files);
+					localStorage.lastFile = 'excel_files/'+e.target.files[0].name;
+					
+					$scope.parse();
+				});
+				
+				console.log('drillingInfo controller loaded...');
+				
+				$scope.displayWells = function() {
+					console.log('Current loaded wells', $scope.wells.all());
+				};
+				
+				$scope.$watch('wells.selectedWell', function(well) {
+					console.log('well changed',well);
+					if (well) {
+						$scope.data = well.buildGraphData();
+					}
+				});
+				
+				$scope.parse = function(filename) {
+					var files = $('#fileInput')[0].files;
+					var lastFile = null;
+					var papaConfig = {
 						header: true,
 						dynamicTyping: true,
 						complete: function(results)
 						{
 							console.log("Done with all files.");
 							console.log(results);
-							console.log(wells.loadData(results.data));
-							
-							wells.selectedWell.plotGoogleLine();
+							console.log($scope.wells.loadData(results.data));
+							$scope.$apply();
 						}
-					});					
-				});
-				$('#next_well').click(function()
-				{	
-					wells.selectNextWell();
-				});
-				$('#prev_well').click(function()
-				{	
-					wells.selectPreviousWell();
-				});
-			});
-			
-			//google plot scripts
-			function drawChart(data,well_name) {		
-			
-			var options = {
-			title: 'Drilling History for well ' + well_name,
-			width: 900,
-			height: 500,
-			dateFormat: 'dd.MM.yy hh:mm',
-			tooltip: {isHtml: true,trigger: 'both'}, //allows for nice html form in tooltip
-			//colors: colors_array,
-			hAxis: {
-			//format: 'Y,M,d,H',
-			gridlines: {count: 15}
-			},
-			vAxis: {
-			gridlines: {color: 'none'},
-			minValue: 0
-			}
-			};
-			
-			var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
-			
-			chart.draw(data, options);
-			}
-			
-			
-			//helper scripts
-			function transformArr(allData) {
-			for (var i = 0; i < allData.length; i++) {
-			var row = allData[i];
-			var onWell = wells.getWell(row.UWI) || wells.addWell(new Well(row.UWI, row.Wellname));
-			
-			onWell.addDetails(row);
-			}
-			return wells;
-			}
-			
-			function set_color(operation){
-			switch (operation) {
-			case "Csg & Cmt":
-			color = "purple";
-			break;
-			case "Drilling":
-			color = "red";
-			break;
-			case "Logging":
-			color = "yellow";
-			break;
-			default: 
-			color  = "blue";
-			}
-			return color;
-			}
-			
-			function createHTMLContent(well_data, current_data_ID) {
-			return '<div style="padding:5px 5px 5px 5px;">' +
-			'<form class="form-horizontal"><fieldset><legend>Details for date: ' + well_data.StartTime + ' to '+ well_data.EndTime +'</legend>' +
-			'<div class="control-group"><label class="control-label" for="depth">UWI</label>' +
-			'<div class="controls"><input id="textinput" name="UWI" type="text" value="'+well_data.UWI+'" class="input-large text-center" required=""></div></div>' +	
-			'<div class="control-group"><label class="control-label" for="depth">Wellname</label>' +
-			'<div class="controls"><input id="textinput" name="Wellname" type="text" value="'+well_data.Wellname+'" class="input-large text-center" required=""></div></div>' +	
-			'<div class="control-group"><label class="control-label" for="depth">Depth</label>' +
-			'<div class="controls"><input id="textinput" name="QC_AutoDepth" type="text" value="'+well_data.QC_AutoDepth+'" class="input-large text-center" required=""></div></div>' +	
-			'<div class="control-group"><label class="control-label" for="major_operation">Major Operation</label>' +
-			'<div class="controls"><input id="textinput" name="QC_MajorOperation" type="text" value="'+well_data.QC_MajorOperation+'" class="input-large text-center" required=""></div></div>' +	
-			'<div class="control-group"><label class="control-label" for="hole_size">Hole Size</label>' +
-			'<div class="controls"><input id="textinput" name="QC_AutoHS" type="text" value="'+well_data.QC_AutoHS+'" class="input-large text-center" required=""></div></div>' +	
-			'<div class="control-group"><label class="control-label" for="textarea">Drilling Text</label><div class="controls">'+                   
-			'<textarea id="textarea" name="CleanText" style="auto;height:100px">'+well_data.CleanText+'</textarea></div></div>'+
-			'</fieldset></form>'+
-			'<div class="controls"><button id="submit_changes" name="submit_changes" class="btn btn-primary" onclick="submit_changes('+current_data_ID+')">Submit Changes</button></div>'+
-			'</div>';
-			}
-			
-			
-			
-			var Well = function(uwi, wellName) {
-			this.UWI = uwi;
-			this.wellName = wellName;
-			this.details = [];
-			
-			this.addDetails = function(detail) {
-			this.details.push(detail);
-			
-			return this;
-			};
-			
-			this.plotGoogleLine = function() {
-			console.log('plotting ' + this.UWI + '...');
-			//current_UWI = dataset.Well_UWI;
-			//well_name = dataset.Wellname;
-			
-			var chart_data = new google.visualization.DataTable();
-			chart_data.addColumn('date', 'Date');
-			chart_data.addColumn('number', 'Depth');
-			chart_data.addColumn({'type': 'string', 'role': 'tooltip', 'p': {'html': true}});
-			chart_data.addColumn({type: 'string', role: 'style'});
-			
-			for (var i = 0; i <this.details.length; i++) {
-			var detail = this.details[i];
-			color = set_color(detail.QC_MajorOperation);
-			chart_data.addRows([
-			[new Date(detail.StartTime), detail.QC_AutoDepth*-1, createHTMLContent(detail,i), "line { stroke-color:"+color+"}"]
-			]);
-			}
-			drawChart(chart_data,this.wellName);
-			
-			return this;
-			};
-			};
-			
-			var ListOfWells = function() {
-			var data = [];
-			var index = {};
-			this.selectedWell = null;
-			
-			this.all = this.getAll = function() {
-			return data;
-			};
-			
-			this.addWell = function(well) {
-			data.push(well);
-			index[well.UWI] = well;
-			
-			this.selectedWell = this.selectedWell || well;
-			
-			return well;
-			};
-			
-			this.selectNextWell = function() {
-			var index = data.indexOf(this.selectedWell);
-			if (index + 1 < data.length - 1) {
-			this.selectedWell = data[++index].plotGoogleLine();
-			}
-			
-			return this;
-			};
-			
-			this.selectPreviousWell = function() {
-			var index = data.indexOf(this.selectedWell);
-			if (index > 0) {
-			this.selectedWell = data[--index].plotGoogleLine();
-			}
-			
-			return this;
-			};
-			
-			this.getWell = function(wellName) {
-			return index[wellName];
-			};
-			
-			this.loadData = function(newData) {
-			for (var i = 0; i < newData.length; i++) {
-			var row = newData[i];
-			var onWell = this.getWell(row.UWI) || this.addWell(new Well(row.UWI, row.Wellname));
-			
-			onWell.addDetails(row);
-			}
-			return this;
-			};
-			};
-			
-			var wells = new ListOfWells();
-			
-			
-			console.log(wells);
-			
-			wells.all().forEach(function(well) {
-			well.plot();
-			});
-			
-			function submit_changes(current_data_ID) {
-			console.log('changing detail information for ' + wells.selectedWell.UWI, wells.selectedWell.details[current_data_ID]);
-			changes = $('form').serializeArray();
-			console.log(changes);
-			for (var i = 1; i < changes.length; i++) {
-			field = changes[i].name;
-			wells.selectedWell.details[current_data_ID][field] = changes[i].value; //loops through all the changes array, finds the field that matches the name in the master input, and changes the value				
-			}
-			console.log("this well point was changed");
-			console.log('new detail information for ' + wells.selectedWell.UWI, wells.selectedWell.details[current_data_ID]);
-			wells.selectedWell.plotGoogleLine();
-			}
-			
-			</script>
-			</head>
-			<body>
-			<h1><Drilling QC Tool</h1>
-			
-			<div class="grid-container">
-			<div class="grid-75 text-center">
-			<input type="file" id="fileInput" multiple>
-			
-			<br><br>
-			
-			<button id="submit-parse">Parse</button>
-			&nbsp;
-			<button id="submit-unparse">Unparse</button>
-			
-			</div>
-			<div id="chart_div"></div>
-			<button id="prev_well">Previous Well</button>
-			<button id="next_well">Next Well</button>
-			
-			</div>
+					};
+					if (lastFile = localStorage.lastFile) {
+						$.get(lastFile,function(data) {
+							Papa.parse(data,papaConfig);
+						});		
+					}
+				};
+				
+				if (localStorage.lastFile) {
+					$scope.parse();
+				}
+				
+				$scope.options = {
+					chart: {
+						type: 'lineChart',
+						height: 450,
+						margin : {
+							top: 20,
+							right: 20,
+							bottom: 60,
+							left: 45
+						},
+						x: function(d){ return d[0]; },
+						y: function(d){ return d[1]*-1; },
+						//average: function(d) { return d.mean/100; },
+						
+						color: d3.scale.category10().range(),
+						transitionDuration: 300,
+						useInteractiveGuideline: true,
+						// clipVoronoi: false,
+						
+						xAxis: {
+							axisLabel: 'X Axis',
+							tickFormat: function(d) {
+								return d3.time.format('%m/%d/%y')(new Date(d))
+							},
+							showMaxMin: false,
+							staggerLabels: true
+						},
+						
+						yAxis: {
+							axisLabel: 'Y Axis',
+							tickFormat: function(d){
+								return d3.format('')(d);
+							},
+							axisLabelDistance: 20
+						}
+					}
+				};
+				
+				$scope.data = [];			
+				
+			}) //this closes the controller
+			;
+		</script>
+	</head>
+	<body>
+		<div class="container-fluid" ng-app="drillingApp" ng-controller="drillingInfoController">
+			<div class="row">
+				<h1><Drilling QC Tool</h1>
+				</div>
+				<div class="row">
+					<input type="file" id="fileInput" ng-model="file.test" />
+					<button class="btn" ng-click="wells.selectedWell.export()">Export Well</button>
+					<button class="btn" ng-click="wells.selectPreviousWell()">Previous Well</button>
+					<button class="btn" ng-click="wells.selectNextWell()">Next Well</button>
+				</div>
+				
+				<div class="row">
+					<div class="col-md-8">
+						<div class="row nvdGraph">
+							<nvd3 options="options" data="data" class="with-3d-shadow with-transitions"></nvd3>
+						</div>
+						<div class="row">
+							<button class="btn" ng-click="wells.selectedWell.buildGraphData()">Refresh</button>
+						</div>
+					</div>
+					<div class="col-md-4 inputTable">
+						<div class="row">
+							<h2>{{ wells.selectedWell.UWI }}</h2>
+							
+							<table class="table">
+								<tr>
+									<th>Time</th>
+									<th ng-repeat="field in wells.editableFields">{{ field }}</th>
+								</tr>
+								<tr ng-repeat="detail in wells.selectedWell.details">
+									<td>{{ detail.StartTime }}</td>
+									<td ng-repeat="attribute in wells.editableFields">
+										<input class="table-inputs" ng-model="detail[attribute]" type="text" />
+									</td>
+								</tr>
+							</table>
+						</div>
+					</div>
+				</div>
+				</div>
 			</body>
-			</html>																																																																																																
+		</html>																																																																																																																																																																	

@@ -1,4 +1,8 @@
-div.google-visualization-tooltip {
-	left: 100px;
-	
-}
+input.table-inputs {
+	text-align: center;
+	width: 100px;
+	}
+
+.nvdGraph {
+	margin: 0 1em;
+	}
