@@ -21,15 +21,19 @@
 				switch (operation) {
 					case "Csg & Cmt":
 					color = "purple";
+					shape = "diamond";
 					break;
 					case "Drilling":
 					color = "red";
+					shape = "square";
 					break;
 					case "Logging":
 					color = "yellow";
+					shape = "star";
 					break;
 					default: 
 					color  = "blue";
+					shape = "circle";
 				}
 				return color;
 			}
@@ -59,7 +63,7 @@
 			Well.prototype.buildGraphData = function() {
 				console.log("Building graph data...");
 				var transformed = _.map(this.details, function(row) {
-					return [new Date(row.StartTime), row.QC_AutoDepth];
+					return [new Date(row.StartTime), row.QC_AutoDepth,set_color(row.QC_MajorOperation)];
 				});
 				console.log("transformed data",transformed);
 				
@@ -179,7 +183,7 @@
 				
 				$scope.options = {
 					chart: {
-						type: 'lineChart',
+						type: 'scatterChart',
 						height: 450,
 						margin : {
 							top: 20,
@@ -191,8 +195,8 @@
 						y: function(d){ return d[1]*-1; },
 						//average: function(d) { return d.mean/100; },
 						
-						color: d3.scale.category10().range(),
-						transitionDuration: 300,
+						colors: function(d){ return d[2]; },
+						transitionDuration: 500,
 						useInteractiveGuideline: true,
 						// clipVoronoi: false,
 						
@@ -220,10 +224,10 @@
 			}) //this closes the controller
 			;
 			
-$(document).on("click", "#chart_svg", function(e) {
-     //console.log (e);
-     console.log (e.target.__data__);
-    });
+			$(document).on("click", "#chart_svg", function(e) {
+				//console.log (e);
+				console.log (e.target.__data__);
+			});
 		</script>
 	</head>
 	<body>
@@ -268,4 +272,4 @@ $(document).on("click", "#chart_svg", function(e) {
 				</div>
 				</div>
 			</body>
-		</html>																																																																																																																																																																			
+		</html>																																																																																																																																																																					
