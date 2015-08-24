@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Drilling QC Tool</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/bootstrap-responsive.min.css">
+    <link rel="stylesheet" href="css/drilling_QC.css">
+    <link rel="stylesheet" href="css/nv.d3.min.css"/>
+    <script src="js/lodash.min.js"></script>
+    <script src="js/models/well.js"></script>
+    <script src="js/models/wells.js"></script>
+    <script src="js/papaparse.min.js"></script>
+    <script src="js/angular.min.js"></script>
+    <script src="js/jquery-2.1.4.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/angular-nvd3.min.js"></script>
+    <script src="js/d3.min.js"></script>
+    <script src="js/nv.d3.min.js"></script>
+
+
+    <script>
+      function set_color(operation){
+        switch (operation) {
+          case "Csg & Cmt":
+          color = "purple";
+          break;
+          case "Drilling":
+          color = "red";
+          break;
+          case "Logging":
+          color = "yellow";
+          break;
+          default:
+          color  = "blue";
+        }
+        return color;
+      }
+
+      angular
+      .module('drillingApp', ['nvd3'])
+      .controller('drillingInfoController', function($scope, $window) {
+        $window.wells = $scope.wells = new ListOfWells();
+        $scope.plotAttribute = 'QC_AutoDepth';
+        $scope.plotGroup = 'QC_MajorOperation';
+
+        $('#fileInput').change(function(e){
+          console.log('selected file changed ',e.target.files);
+          localStorage.lastFile = 'excel_files/'+e.target.files[0].name;
+
+          $scope.parse();
+        });
+
+        console.log('drillingInfo controller loaded...');
+
+        $scope.displayWells = function() {
+          console.log('Current loaded wells', $scope.wells.all());
+        };
+
+        $scope.$watch('wells.selectedWell', function(well) {
+          console.log('well changed',well);
+          if (well) {
+            var chartData = well.getScatterData($scope.plotAttribute, $scope.plotGroup);
+            console.log('CHARTING', chartData);
+            $scope.data = chartData;
+          }
+        });
+
+        $scope.$watch('plotGroup', function(group) {
+          if (group && $scope.wells && $scope.wells.wells.length) {
+            var chartData = $scope.wells.selectedWell.getScatterData($scope.plotAttribute, group);
+            $scope.data = chartData;
+          }
+        });
+
+        $scope.$watch('wells', function(wells) {
+          console.log('ListOfWells',wells);
+        });
+
+        $scope.parse = function(filename) {
+          var files = $('#fileInput')[0].files;
+          var lastFile = null;
+          var papaConfig = {
+            header: true,
+            dynamicTyping: true,
+            complete: function(results)
+            {
+              console.log("Done with all files.");
+              console.log(results);
+              console.log($scope.wells.loadData(results.data));
+
+              $scope.detailAttributes = _.keys($scope.wells.wells[0].details[0]);
+
+              $scope.$apply();
+            }
+          };
+          if (lastFile = localStorage.lastFile) {
+            $.get(lastFile,function(data) {
+              Papa.parse(data,papaConfig);
+            });
+          }
+        };
+
+        // load last loaded file (filename stored in localStorage)
+        if (localStorage.lastFile) {
+          $scope.parse();
+        }
+
+        $scope.options = {
+          chart: {
+            type: 'scatterChart',
+            height: 450,
+            margin : {
+              top: 20,
+              right: 20,
+              bottom: 60,
+              left: 45
+            },
+            // showDistX: true,
+            showDistY: true,
+            scatter: {
+              onlyCircles: false,
+            },
+            //average: function(d) { return d.mean/100; },
+
+            color: d3.scale.category10().range(),
+            transitionDuration: 300,
+            useInteractiveGuideline: true,
+            // clipVoronoi: false,
+
+            xAxis: {
+              axisLabel: 'X Axis',
+              tickFormat: function(d) {
+                return d3.time.format('%m/%d/%y')(new Date(d))
+              },
+              showMaxMin: false,
+              staggerLabels: true
+            },
+
+            yAxis: {
+              axisLabel: 'Y Axis',
+              tickFormat: function(d){
+                return d3.format('')(d);
+              },
+              axisLabelDistance: 20
+            }
+          }
+        };
+
+        $scope.data = [];
+      }) //this closes the controller
+      ;
+    </script>
+  </head>
+  <body>
+    <div class="container" ng-app="drillingApp" ng-controller="drillingInfoController">
+      <div class="row">
+        <h1><Drilling QC Tool</h1>
+        </div>
+        <div class="row">
+          <input type="file" id="fileInput" ng-model="file.test" />
+          <button class="btn" ng-click="wells.selectedWell.export()">Export Well</button>
+          <button class="btn" ng-click="wells.selectPreviousWell()">Previous Well</button>
+          <button class="btn" ng-click="wells.selectNextWell()">Next Well</button>
+          <select class="form-control inline" ng-model="plotGroup">
+            <option ng-repeat="attribute in detailAttributes" value="{{ attribute }}">{{ attribute }}</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="col-md-8">
+            <div class="row nvdGraph">
+              <nvd3 options="options" data="data" id="chart_svg" class="with-3d-shadow with-transitions"></nvd3>
+            </div>
+            <div class="row">
+              <button class="btn" ng-click="wells.selectedWell.buildGraphData()">Refresh</button>
+            </div>
+          </div>
+          <div class="col-md-4 inputTable">
+            <div class="row">
+              <h2>{{ wells.selectedWell.UWI }}
+              </h2>
+
+              <table class="table">
+                <tr>
+                  <th>Time</th>
+                  <th ng-repeat="field in wells.editableFields">{{ field }}</th>
+                </tr>
+                <tr ng-repeat="detail in wells.selectedWell.details">
+                  <td>{{ detail.StartTime }}</td>
+                  <td ng-repeat="attribute in wells.editableFields">
+                    <input class="table-inputs" ng-model="detail[attribute]" type="text" />
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        </div>
+        </div>
+      </body>
+    </html>

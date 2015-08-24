@@ -1,8 +1,13 @@
 input.table-inputs {
 	text-align: center;
 	width: 100px;
-	}
+}
 
 .nvdGraph {
 	margin: 0 1em;
-	}
+}
+
+.form-control.inline {
+  display: inline-block;
+  width: auto;
+}
